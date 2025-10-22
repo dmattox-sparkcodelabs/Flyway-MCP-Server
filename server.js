@@ -33,6 +33,10 @@ export const InitializeProjectSchema = z.object({
   migrations_path: z.string().optional().describe('Relative path to migrations directory (default: ./migrations)'),
 });
 
+export const UpdateMigrationPathSchema = z.object({
+  new_migrations_path: z.string().describe('New relative path to migrations directory (e.g., ./db/migrations)'),
+});
+
 // Module-level state for active project
 let activeProjectPath = null;
 let activeProjectConfig = null;
@@ -144,6 +148,20 @@ export function createServer(flyway, config) {
               },
             },
             required: ['project_path'],
+          },
+        },
+        {
+          name: 'update_migration_path',
+          description: 'Update the migrations directory path in project config. NOTE: This only updates the config file - it does NOT move any existing migration files. You must manually move files if needed.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              new_migrations_path: {
+                type: 'string',
+                description: 'New relative path to migrations directory (e.g., ./db/migrations, ./sql/migrations)',
+              },
+            },
+            required: ['new_migrations_path'],
           },
         },
         {
@@ -290,6 +308,44 @@ export function createServer(flyway, config) {
               {
                 type: 'text',
                 text: `Project initialized successfully!\n\nProject: ${projectPath}\nMigrations: ${migrationsPath}${migrationsExist ? ' (already existed)' : ' (created)'}\nConfig: ${path.join(projectPath, '.flyway-mcp.json')}${configExisted ? ' (already existed)' : ' (created)'}\n\nThis project is now active. All migration operations will use this project's configuration.\n\nNext steps:\n1. Create migrations using 'create_migration'\n2. Apply migrations using 'flyway_migrate'`,
+              },
+            ],
+          };
+        }
+
+        case 'update_migration_path': {
+          const validatedArgs = UpdateMigrationPathSchema.parse(args);
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const newMigrationsPath = validatedArgs.new_migrations_path;
+          const oldMigrationsPath = activeProjectConfig.migrations_path;
+
+          // Update the config with new path
+          const updatedConfig = {
+            ...activeProjectConfig,
+            migrations_path: newMigrationsPath,
+          };
+
+          await writeProjectConfig(activeProjectPath, updatedConfig);
+
+          // Update active config in memory
+          activeProjectConfig = updatedConfig;
+
+          // Calculate absolute paths for display
+          const oldAbsolutePath = path.isAbsolute(oldMigrationsPath)
+            ? oldMigrationsPath
+            : path.join(activeProjectPath, oldMigrationsPath);
+          const newAbsolutePath = path.isAbsolute(newMigrationsPath)
+            ? newMigrationsPath
+            : path.join(activeProjectPath, newMigrationsPath);
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Migration path updated successfully!\n\nProject: ${activeProjectPath}\nOld path: ${oldAbsolutePath}\nNew path: ${newAbsolutePath}\n\n⚠️  IMPORTANT: This tool only updated the config file.\nYou must manually move your migration files from the old location to the new location.\n\nSteps to complete the migration:\n1. Create the new directory: mkdir -p ${newAbsolutePath}\n2. Move migration files: mv ${oldAbsolutePath}/*.sql ${newAbsolutePath}/\n3. Verify files moved correctly\n4. Remove old directory if empty: rmdir ${oldAbsolutePath}`,
               },
             ],
           };
