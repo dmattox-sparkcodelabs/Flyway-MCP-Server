@@ -4,6 +4,7 @@ package-lock.json
 
 # Test artifacts
 test-migrations/
+test-migrations-temp/
 coverage/
 .jest-cache/
 
