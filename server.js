@@ -237,6 +237,24 @@ export function createServer(flyway, config) {
             throw new Error(`Project directory does not exist: ${projectPath}`);
           }
 
+          // Check for existing config file
+          const existingConfig = await readProjectConfig(projectPath);
+          let configExisted = false;
+          let projectConfig;
+
+          if (existingConfig) {
+            // Use existing config
+            projectConfig = existingConfig;
+            configExisted = true;
+          } else {
+            // Create new config
+            projectConfig = {
+              migrations_path: './migrations',
+              created_at: new Date().toISOString(),
+            };
+            await writeProjectConfig(projectPath, projectConfig);
+          }
+
           // Check for existing migrations directory
           const migrationsPath = path.join(projectPath, 'migrations');
           let migrationsExist = false;
@@ -252,14 +270,6 @@ export function createServer(flyway, config) {
             await fs.mkdir(migrationsPath, { recursive: true });
           }
 
-          // Create or update .flyway-mcp.json
-          const projectConfig = {
-            migrations_path: './migrations',
-            created_at: new Date().toISOString(),
-          };
-
-          await writeProjectConfig(projectPath, projectConfig);
-
           // Set as active project
           activeProjectPath = projectPath;
           activeProjectConfig = projectConfig;
@@ -268,7 +278,7 @@ export function createServer(flyway, config) {
             content: [
               {
                 type: 'text',
-                text: `Project initialized successfully!\n\nProject: ${projectPath}\nMigrations: ${migrationsPath}${migrationsExist ? ' (already existed)' : ' (created)'}\nConfig: ${path.join(projectPath, '.flyway-mcp.json')} (created)\n\nThis project is now active. All migration operations will use this project's configuration.\n\nNext steps:\n1. Create migrations using 'create_migration'\n2. Apply migrations using 'flyway_migrate'`,
+                text: `Project initialized successfully!\n\nProject: ${projectPath}\nMigrations: ${migrationsPath}${migrationsExist ? ' (already existed)' : ' (created)'}\nConfig: ${path.join(projectPath, '.flyway-mcp.json')}${configExisted ? ' (already existed)' : ' (created)'}\n\nThis project is now active. All migration operations will use this project's configuration.\n\nNext steps:\n1. Create migrations using 'create_migration'\n2. Apply migrations using 'flyway_migrate'`,
               },
             ],
           };

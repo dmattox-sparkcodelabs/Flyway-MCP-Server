@@ -491,6 +491,39 @@ describe('Flyway MCP Server Integration Tests', () => {
       expect(result.content[0].text).toContain('already existed');
     });
 
+    test('should not overwrite existing config file', async () => {
+      // Create test project directory
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      // Create an existing config file with a specific timestamp
+      const originalConfig = {
+        migrations_path: './migrations',
+        created_at: '2024-01-01T00:00:00.000Z',
+      };
+      const configPath = path.join(testProjectDir, '.flyway-mcp.json');
+      await fs.writeFile(configPath, JSON.stringify(originalConfig, null, 2), 'utf8');
+
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+
+      // Verify response indicates config already existed
+      expect(result.content[0].text).toContain('already existed');
+
+      // Verify config file was NOT overwritten
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      expect(config.created_at).toBe('2024-01-01T00:00:00.000Z');
+      expect(config).toEqual(originalConfig);
+    });
+
     test('should reject non-existent project directory', async () => {
       const nonExistentPath = path.join(__dirname, 'does-not-exist-12345');
 
