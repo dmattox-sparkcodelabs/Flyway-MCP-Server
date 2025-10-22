@@ -12,6 +12,7 @@ import {
 import { z } from 'zod';
 import fs from 'fs/promises';
 import path from 'path';
+import { Flyway } from 'node-flyway';
 
 // Validation schemas
 export const FlywayInfoSchema = z.object({});
@@ -31,6 +32,7 @@ export const CreateMigrationSchema = z.object({
 
 export const InitializeProjectSchema = z.object({
   project_path: z.string().describe('Absolute path to the project directory'),
+  database_url: z.string().describe('Database connection URL (e.g., postgresql://user:password@host:5432/database)'),
   migrations_path: z.string().optional().describe('Relative path to migrations directory for simple mode (default: ./migrations)'),
   migration_categories: z.record(z.string()).optional().describe('Migration categories for structured mode (e.g., {schema: "./migrations/schema", data: "./migrations/data", seed: "./migrations/seed"})'),
 }).refine(
@@ -52,6 +54,7 @@ export const UpdateMigrationPathSchema = z.object({
 // Module-level state for active project
 let activeProjectPath = null;
 let activeProjectConfig = null;
+let activeFlyway = null;
 
 /**
  * Reset project state (for testing)
@@ -59,6 +62,14 @@ let activeProjectConfig = null;
 export function resetProjectState() {
   activeProjectPath = null;
   activeProjectConfig = null;
+  activeFlyway = null;
+}
+
+/**
+ * Set active Flyway instance (for testing)
+ */
+export function setActiveFlyway(flyway) {
+  activeFlyway = flyway;
 }
 
 /**
@@ -171,13 +182,17 @@ export function createServer(flyway, config) {
       tools: [
         {
           name: 'initialize_project',
-          description: 'Initialize Flyway for a project. Supports simple mode (single migrations folder) or structured mode (organized by category). Creates migrations directory if needed and generates .flyway-mcp.json config file. Sets this project as active for all subsequent migration operations.',
+          description: 'Initialize Flyway for a project. Supports simple mode (single migrations folder) or structured mode (organized by category). Creates migrations directory if needed and generates .flyway-mcp.json config file with project-specific database connection. Sets this project as active for all subsequent migration operations.',
           inputSchema: {
             type: 'object',
             properties: {
               project_path: {
                 type: 'string',
                 description: 'Absolute path to the project directory (e.g., /home/user/my-project)',
+              },
+              database_url: {
+                type: 'string',
+                description: 'Database connection URL (REQUIRED). Format: postgresql://user:password@host:port/database. Example: postgresql://postgres:pass@host.docker.internal:5432/mydb',
               },
               migrations_path: {
                 type: 'string',
@@ -191,7 +206,7 @@ export function createServer(flyway, config) {
                 },
               },
             },
-            required: ['project_path'],
+            required: ['project_path', 'database_url'],
           },
         },
         {
@@ -326,6 +341,7 @@ export function createServer(flyway, config) {
               // Structured mode
               isStructuredMode = true;
               projectConfig = {
+                database_url: validatedArgs.database_url,
                 migration_categories: validatedArgs.migration_categories,
                 created_at: new Date().toISOString(),
               };
@@ -333,6 +349,7 @@ export function createServer(flyway, config) {
               // Simple mode
               const migrationsPathConfig = validatedArgs.migrations_path || './migrations';
               projectConfig = {
+                database_url: validatedArgs.database_url,
                 migrations_path: migrationsPathConfig,
                 created_at: new Date().toISOString(),
               };
@@ -375,6 +392,15 @@ export function createServer(flyway, config) {
           // Set as active project
           activeProjectPath = projectPath;
           activeProjectConfig = projectConfig;
+
+          // Create Flyway instance for this project
+          const flywayConfig = {
+            url: projectConfig.database_url,
+            locations: isStructuredMode
+              ? Object.values(projectConfig.migration_categories).map(p => `filesystem:${path.isAbsolute(p) ? p : path.join(projectPath, p)}`)
+              : [`filesystem:${path.isAbsolute(projectConfig.migrations_path) ? projectConfig.migrations_path : path.join(projectPath, projectConfig.migrations_path)}`],
+          };
+          activeFlyway = new Flyway(flywayConfig);
 
           const mode = isStructuredMode ? 'structured' : 'simple';
           const dirsText = createdDirs.join('\n  ');
@@ -429,7 +455,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_info': {
           FlywayInfoSchema.parse(args);
-          const result = await flyway.info();
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.info();
           return {
             content: [
               {
@@ -442,7 +472,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_migrate': {
           FlywayMigrateSchema.parse(args);
-          const result = await flyway.migrate();
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.migrate();
           return {
             content: [
               {
@@ -455,7 +489,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_validate': {
           FlywayValidateSchema.parse(args);
-          const result = await flyway.validate();
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.validate();
           return {
             content: [
               {
@@ -468,7 +506,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_clean': {
           FlywayCleanSchema.parse(args);
-          const result = await flyway.clean();
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.clean();
           return {
             content: [
               {
@@ -481,7 +523,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_baseline': {
           const validatedArgs = FlywayBaselineSchema.parse(args);
-          const result = await flyway.baseline(validatedArgs);
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.baseline(validatedArgs);
           return {
             content: [
               {
@@ -494,7 +540,11 @@ export function createServer(flyway, config) {
 
         case 'flyway_repair': {
           FlywayRepairSchema.parse(args);
-          const result = await flyway.repair();
+
+          // Require project initialization
+          requireInitializedProject();
+
+          const result = await activeFlyway.repair();
           return {
             content: [
               {

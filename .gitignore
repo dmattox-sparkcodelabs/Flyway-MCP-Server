@@ -9,6 +9,12 @@ test-project-init/
 test-project-migrations/
 test-project-update-path/
 test-project-structured/
+test-project-flyway-info/
+test-project-flyway-migrate/
+test-project-flyway-validate/
+test-project-flyway-clean/
+test-project-flyway-baseline/
+test-project-flyway-repair/
 coverage/
 .jest-cache/
 

@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { createServer, resetProjectState } from './server.js';
+import { createServer, resetProjectState, setActiveFlyway } from './server.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -16,6 +16,9 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Test database URL for all tests
+const TEST_DATABASE_URL = 'postgresql://postgres:testpass@localhost:5432/testdb';
 
 describe('Flyway MCP Server Integration Tests', () => {
   let mockFlyway;
@@ -106,6 +109,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_info tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-info');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.info() and return result', async () => {
       const mockInfo = {
         current: { version: '1.0', description: 'Initial' },
@@ -144,6 +176,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_migrate tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-migrate');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.migrate() and return result', async () => {
       const mockMigrate = {
         migrationsExecuted: 2,
@@ -167,6 +228,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_validate tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-validate');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.validate() and return result', async () => {
       const mockValidate = {
         validationSuccessful: true,
@@ -189,6 +279,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_clean tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-clean');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.clean() and return result', async () => {
       const mockClean = {
         schemasDropped: ['public'],
@@ -211,6 +330,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_baseline tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-baseline');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.baseline() with no args', async () => {
       const mockBaseline = {
         baselineVersion: '1',
@@ -260,6 +408,35 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('flyway_repair tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-flyway-repair');
+
+    beforeEach(async () => {
+      // Initialize project for Flyway commands
+      await fs.mkdir(testProjectDir, { recursive: true });
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
+          },
+        },
+      });
+      // Replace real Flyway instance with mock
+      setActiveFlyway(mockFlyway);
+    });
+
+    afterEach(async () => {
+      // Clean up
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should call flyway.repair() and return result', async () => {
       const mockRepair = {
         repairActions: ['Removed failed migration entry'],
@@ -296,6 +473,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
@@ -411,6 +589,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
             migration_categories: {
               schema: './migrations/schema',
               data: './migrations/data',
@@ -539,6 +718,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
@@ -560,6 +740,7 @@ describe('Flyway MCP Server Integration Tests', () => {
       // Verify config content
       const configContent = await fs.readFile(configPath, 'utf8');
       const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('database_url', TEST_DATABASE_URL);
       expect(config).toHaveProperty('migrations_path', './migrations');
       expect(config).toHaveProperty('created_at');
     });
@@ -575,6 +756,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
@@ -601,6 +783,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
@@ -626,6 +809,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
             migrations_path: './db/migrations',
           },
         },
@@ -635,6 +819,7 @@ describe('Flyway MCP Server Integration Tests', () => {
       const configPath = path.join(testProjectDir, '.flyway-mcp.json');
       const configContent = await fs.readFile(configPath, 'utf8');
       const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('database_url', TEST_DATABASE_URL);
       expect(config.migrations_path).toBe('./db/migrations');
 
       // Verify custom directory was created
@@ -657,6 +842,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
@@ -665,6 +851,7 @@ describe('Flyway MCP Server Integration Tests', () => {
       const configPath = path.join(testProjectDir, '.flyway-mcp.json');
       const configContent = await fs.readFile(configPath, 'utf8');
       const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('database_url', TEST_DATABASE_URL);
       expect(config.migrations_path).toBe('./migrations');
 
       // Verify default directory was created
@@ -684,6 +871,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: nonExistentPath,
+            database_url: TEST_DATABASE_URL,
           },
         },
       })).rejects.toThrow('Project directory does not exist');
@@ -699,6 +887,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
             migration_categories: {
               schema: './migrations/schema',
               data: './migrations/data',
@@ -712,6 +901,7 @@ describe('Flyway MCP Server Integration Tests', () => {
       const configPath = path.join(testProjectDir, '.flyway-mcp.json');
       const configContent = await fs.readFile(configPath, 'utf8');
       const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('database_url', TEST_DATABASE_URL);
       expect(config).toHaveProperty('migration_categories');
       expect(config.migration_categories).toHaveProperty('schema');
       expect(config.migration_categories).toHaveProperty('data');
@@ -741,6 +931,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
             migrations_path: './migrations',
             migration_categories: {schema: './migrations/schema'},
           },
@@ -763,6 +954,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
             migrations_path: './migrations',
           },
         },
@@ -891,6 +1083,7 @@ describe('Flyway MCP Server Integration Tests', () => {
           name: 'initialize_project',
           arguments: {
             project_path: testProjectDir,
+            database_url: TEST_DATABASE_URL,
           },
         },
       });
