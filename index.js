@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+/**
+ * Flyway MCP Server
+ * Copyright (c) 2025 David Mattox @ SparkCodeLabs.com
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {

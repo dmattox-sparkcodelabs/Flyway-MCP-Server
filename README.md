@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2025 David Mattox @ SparkCodeLabs.com
+Licensed under the MIT License. See LICENSE file in the project root.
+-->
+
 # Flyway MCP Server
 
 A Model Context Protocol (MCP) server that provides Flyway database migration management capabilities to AI assistants like Claude Code.

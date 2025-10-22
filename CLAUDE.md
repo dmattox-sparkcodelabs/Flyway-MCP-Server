@@ -1,3 +1,8 @@
+<!--
+Copyright (c) 2025 David Mattox @ SparkCodeLabs.com
+Licensed under the MIT License. See LICENSE file in the project root.
+-->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
