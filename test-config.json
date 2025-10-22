@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "flyway-test": {
+      "command": "node",
+      "args": ["./index.js"],
+      "env": {
+        "FLYWAY_URL": "postgresql://testuser:testpass123@localhost:5433/flyway_test",
+        "FLYWAY_LOCATIONS": "filesystem:./test-migrations"
+      }
+    }
+  }
+}
