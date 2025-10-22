@@ -83,7 +83,24 @@ chmod +x index.js
 
 4. **Configure Claude Code**
 
-Add to your `~/.config/Claude/claude_desktop_config.json`:
+Edit your Claude Desktop configuration file:
+
+**Linux:**
+```bash
+nano ~/.config/Claude/claude_desktop_config.json
+```
+
+**macOS:**
+```bash
+nano ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+**Windows:**
+```
+notepad %APPDATA%\Claude\claude_desktop_config.json
+```
+
+Add this configuration:
 
 ```json
 {
@@ -103,6 +120,7 @@ Add to your `~/.config/Claude/claude_desktop_config.json`:
 **Important:** Replace with absolute paths:
 - Path to `index.js` in this repository
 - Path to your project's migrations directory
+- On Windows, use forward slashes `/` or escaped backslashes `\\` in paths
 
 5. **Create migrations directory in your project**
 
