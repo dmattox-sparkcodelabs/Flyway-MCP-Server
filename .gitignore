@@ -8,6 +8,7 @@ test-migrations-temp/
 test-project-init/
 test-project-migrations/
 test-project-update-path/
+test-project-structured/
 coverage/
 .jest-cache/
 

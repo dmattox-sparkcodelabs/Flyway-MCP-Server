@@ -397,6 +397,96 @@ describe('Flyway MCP Server Integration Tests', () => {
     });
   });
 
+  describe('create_migration tool with structured mode', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-structured');
+
+    beforeEach(async () => {
+      // Create test project directory and initialize in structured mode
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            migration_categories: {
+              schema: './migrations/schema',
+              data: './migrations/data',
+              seed: './migrations/seed',
+            },
+          },
+        },
+      });
+    });
+
+    afterEach(async () => {
+      // Clean up test project directory
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
+    test('should create migration in specified category', async () => {
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'create_migration',
+          arguments: {
+            description: 'create_users_table',
+            sql: 'CREATE TABLE users (id SERIAL);',
+            category: 'schema',
+          },
+        },
+      });
+
+      // Verify file was created in schema directory
+      const schemaDir = path.join(testProjectDir, 'migrations', 'schema');
+      const files = await fs.readdir(schemaDir);
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatch(/^V\d{14}__create_users_table\.sql$/);
+
+      // Verify response includes category
+      expect(result.content[0].text).toContain('Category: schema');
+    });
+
+    test('should reject missing category in structured mode', async () => {
+      const handler = server._requestHandlers.get('tools/call');
+
+      await expect(handler({
+        method: 'tools/call',
+        params: {
+          name: 'create_migration',
+          arguments: {
+            description: 'test_migration',
+            sql: 'CREATE TABLE test (id SERIAL);',
+            // No category provided
+          },
+        },
+      })).rejects.toThrow('Category is required in structured mode');
+    });
+
+    test('should reject invalid category', async () => {
+      const handler = server._requestHandlers.get('tools/call');
+
+      await expect(handler({
+        method: 'tools/call',
+        params: {
+          name: 'create_migration',
+          arguments: {
+            description: 'test_migration',
+            sql: 'CREATE TABLE test (id SERIAL);',
+            category: 'invalid',
+          },
+        },
+      })).rejects.toThrow('Invalid category "invalid"');
+    });
+  });
+
   describe('Error Handling', () => {
     test('should throw error for unknown tool', async () => {
       const handler = server._requestHandlers.get('tools/call');
@@ -597,6 +687,65 @@ describe('Flyway MCP Server Integration Tests', () => {
           },
         },
       })).rejects.toThrow('Project directory does not exist');
+    });
+
+    test('should initialize in structured mode with categories', async () => {
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            migration_categories: {
+              schema: './migrations/schema',
+              data: './migrations/data',
+              seed: './migrations/seed',
+            },
+          },
+        },
+       });
+
+      // Verify config has categories
+      const configPath = path.join(testProjectDir, '.flyway-mcp.json');
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('migration_categories');
+      expect(config.migration_categories).toHaveProperty('schema');
+      expect(config.migration_categories).toHaveProperty('data');
+      expect(config.migration_categories).toHaveProperty('seed');
+
+      // Verify all category directories were created
+      const schemaDir = path.join(testProjectDir, 'migrations', 'schema');
+      const dataDir = path.join(testProjectDir, 'migrations', 'data');
+      const seedDir = path.join(testProjectDir, 'migrations', 'seed');
+
+      expect(await fs.access(schemaDir).then(() => true).catch(() => false)).toBe(true);
+      expect(await fs.access(dataDir).then(() => true).catch(() => false)).toBe(true);
+      expect(await fs.access(seedDir).then(() => true).catch(() => false)).toBe(true);
+
+      // Verify response mentions structured mode
+      expect(result.content[0].text).toContain('structured');
+    });
+
+    test('should reject both migrations_path and migration_categories', async () => {
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+
+      await expect(handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            migrations_path: './migrations',
+            migration_categories: {schema: './migrations/schema'},
+          },
+        },
+      })).rejects.toThrow('Cannot specify both');
     });
   });
 

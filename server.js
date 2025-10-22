@@ -26,12 +26,24 @@ export const FlywayRepairSchema = z.object({});
 export const CreateMigrationSchema = z.object({
   description: z.string().describe('Description of the migration (e.g., "create_users_table")'),
   sql: z.string().describe('SQL content for the migration'),
+  category: z.string().optional().describe('Migration category for structured mode (e.g., "schema", "data", "seed")'),
 });
 
 export const InitializeProjectSchema = z.object({
   project_path: z.string().describe('Absolute path to the project directory'),
-  migrations_path: z.string().optional().describe('Relative path to migrations directory (default: ./migrations)'),
-});
+  migrations_path: z.string().optional().describe('Relative path to migrations directory for simple mode (default: ./migrations)'),
+  migration_categories: z.record(z.string()).optional().describe('Migration categories for structured mode (e.g., {schema: "./migrations/schema", data: "./migrations/data", seed: "./migrations/seed"})'),
+}).refine(
+  (data) => {
+    // Ensure only one mode is specified
+    const hasSimple = !!data.migrations_path;
+    const hasStructured = !!data.migration_categories;
+    return !(hasSimple && hasStructured);
+  },
+  {
+    message: 'Cannot specify both migrations_path (simple mode) and migration_categories (structured mode). Choose one.',
+  }
+);
 
 export const UpdateMigrationPathSchema = z.object({
   new_migrations_path: z.string().describe('New relative path to migrations directory (e.g., ./db/migrations)'),
@@ -72,15 +84,40 @@ async function writeProjectConfig(projectPath, config) {
 
 /**
  * Get migrations directory for active project or fall back to global config
+ * @param {Object} globalConfig - Global Flyway configuration
+ * @param {string} category - Migration category (for structured mode)
+ * @returns {string} Absolute path to migrations directory
  */
-function getMigrationsDirectory(globalConfig) {
-  if (activeProjectConfig && activeProjectConfig.migrations_path) {
-    // Use project-specific migrations path
-    const migrationsPath = activeProjectConfig.migrations_path;
-    if (path.isAbsolute(migrationsPath)) {
-      return migrationsPath;
-    } else {
-      return path.join(activeProjectPath, migrationsPath);
+function getMigrationsDirectory(globalConfig, category = null) {
+  if (activeProjectConfig) {
+    // Structured mode: use category-specific path
+    if (activeProjectConfig.migration_categories) {
+      if (!category) {
+        throw new Error(
+          'Category is required in structured mode. ' +
+          `Available categories: ${Object.keys(activeProjectConfig.migration_categories).join(', ')}`
+        );
+      }
+
+      const categoryPath = activeProjectConfig.migration_categories[category];
+      if (!categoryPath) {
+        throw new Error(
+          `Invalid category "${category}". ` +
+          `Available categories: ${Object.keys(activeProjectConfig.migration_categories).join(', ')}`
+        );
+      }
+
+      return path.isAbsolute(categoryPath)
+        ? categoryPath
+        : path.join(activeProjectPath, categoryPath);
+    }
+
+    // Simple mode: use single migrations path
+    if (activeProjectConfig.migrations_path) {
+      const migrationsPath = activeProjectConfig.migrations_path;
+      return path.isAbsolute(migrationsPath)
+        ? migrationsPath
+        : path.join(activeProjectPath, migrationsPath);
     }
   }
 
@@ -134,7 +171,7 @@ export function createServer(flyway, config) {
       tools: [
         {
           name: 'initialize_project',
-          description: 'Initialize Flyway for a project. Creates migrations directory if needed and generates .flyway-mcp.json config file. Sets this project as active for all subsequent migration operations.',
+          description: 'Initialize Flyway for a project. Supports simple mode (single migrations folder) or structured mode (organized by category). Creates migrations directory if needed and generates .flyway-mcp.json config file. Sets this project as active for all subsequent migration operations.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -144,7 +181,14 @@ export function createServer(flyway, config) {
               },
               migrations_path: {
                 type: 'string',
-                description: 'Relative path to migrations directory (optional, defaults to ./migrations). Examples: ./migrations, ./db/migrations, ./sql',
+                description: 'Simple mode: Relative path to single migrations directory (optional, defaults to ./migrations). Cannot be used with migration_categories.',
+              },
+              migration_categories: {
+                type: 'object',
+                description: 'Structured mode: Object mapping category names to relative paths (e.g., {"schema": "./migrations/schema", "data": "./migrations/data", "seed": "./migrations/seed"}). Cannot be used with migrations_path.',
+                additionalProperties: {
+                  type: 'string',
+                },
               },
             },
             required: ['project_path'],
@@ -223,7 +267,7 @@ export function createServer(flyway, config) {
         },
         {
           name: 'create_migration',
-          description: 'Create a new Flyway migration file with the proper naming convention and content. This is the ONLY way to create schema changes.',
+          description: 'Create a new Flyway migration file with the proper naming convention and content. This is the ONLY way to create schema changes. In structured mode, category is required.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -234,6 +278,10 @@ export function createServer(flyway, config) {
               sql: {
                 type: 'string',
                 description: 'SQL content for the migration',
+              },
+              category: {
+                type: 'string',
+                description: 'Migration category (required in structured mode, ignored in simple mode). Examples: "schema", "data", "seed"',
               },
             },
             required: ['description', 'sql'],
@@ -264,50 +312,78 @@ export function createServer(flyway, config) {
           const existingConfig = await readProjectConfig(projectPath);
           let configExisted = false;
           let projectConfig;
+          let isStructuredMode = false;
+          const createdDirs = [];
 
           if (existingConfig) {
             // Use existing config
             projectConfig = existingConfig;
             configExisted = true;
+            isStructuredMode = !!projectConfig.migration_categories;
           } else {
-            // Create new config with custom or default migrations path
-            const migrationsPathConfig = validatedArgs.migrations_path || './migrations';
-            projectConfig = {
-              migrations_path: migrationsPathConfig,
-              created_at: new Date().toISOString(),
-            };
+            // Determine mode: structured or simple
+            if (validatedArgs.migration_categories) {
+              // Structured mode
+              isStructuredMode = true;
+              projectConfig = {
+                migration_categories: validatedArgs.migration_categories,
+                created_at: new Date().toISOString(),
+              };
+            } else {
+              // Simple mode
+              const migrationsPathConfig = validatedArgs.migrations_path || './migrations';
+              projectConfig = {
+                migrations_path: migrationsPathConfig,
+                created_at: new Date().toISOString(),
+              };
+            }
             await writeProjectConfig(projectPath, projectConfig);
           }
 
-          // Determine absolute migrations directory path
-          const migrationsPathConfig = projectConfig.migrations_path;
-          const migrationsPath = path.isAbsolute(migrationsPathConfig)
-            ? migrationsPathConfig
-            : path.join(projectPath, migrationsPathConfig);
+          // Create directories based on mode
+          if (isStructuredMode) {
+            // Structured mode: create category directories
+            for (const [category, relativePath] of Object.entries(projectConfig.migration_categories)) {
+              const absolutePath = path.isAbsolute(relativePath)
+                ? relativePath
+                : path.join(projectPath, relativePath);
 
-          // Check for existing migrations directory
-          let migrationsExist = false;
-          try {
-            await fs.access(migrationsPath);
-            migrationsExist = true;
-          } catch (error) {
-            // Migrations directory doesn't exist, will create it
-          }
+              try {
+                await fs.access(absolutePath);
+                createdDirs.push(`${category}: ${absolutePath} (already existed)`);
+              } catch (error) {
+                await fs.mkdir(absolutePath, { recursive: true });
+                createdDirs.push(`${category}: ${absolutePath} (created)`);
+              }
+            }
+          } else {
+            // Simple mode: create single migrations directory
+            const migrationsPathConfig = projectConfig.migrations_path;
+            const migrationsPath = path.isAbsolute(migrationsPathConfig)
+              ? migrationsPathConfig
+              : path.join(projectPath, migrationsPathConfig);
 
-          // Create migrations directory if it doesn't exist
-          if (!migrationsExist) {
-            await fs.mkdir(migrationsPath, { recursive: true });
+            try {
+              await fs.access(migrationsPath);
+              createdDirs.push(`${migrationsPath} (already existed)`);
+            } catch (error) {
+              await fs.mkdir(migrationsPath, { recursive: true });
+              createdDirs.push(`${migrationsPath} (created)`);
+            }
           }
 
           // Set as active project
           activeProjectPath = projectPath;
           activeProjectConfig = projectConfig;
 
+          const mode = isStructuredMode ? 'structured' : 'simple';
+          const dirsText = createdDirs.join('\n  ');
+
           return {
             content: [
               {
                 type: 'text',
-                text: `Project initialized successfully!\n\nProject: ${projectPath}\nMigrations: ${migrationsPath}${migrationsExist ? ' (already existed)' : ' (created)'}\nConfig: ${path.join(projectPath, '.flyway-mcp.json')}${configExisted ? ' (already existed)' : ' (created)'}\n\nThis project is now active. All migration operations will use this project's configuration.\n\nNext steps:\n1. Create migrations using 'create_migration'\n2. Apply migrations using 'flyway_migrate'`,
+                text: `Project initialized successfully!\n\nProject: ${projectPath}\nMode: ${mode}\nDirectories:\n  ${dirsText}\nConfig: ${path.join(projectPath, '.flyway-mcp.json')}${configExisted ? ' (already existed)' : ' (created)'}\n\nThis project is now active. All migration operations will use this project's configuration.\n\nNext steps:\n1. Create migrations using 'create_migration'${isStructuredMode ? ' (specify category)' : ''}\n2. Apply migrations using 'flyway_migrate'`,
               },
             ],
           };
@@ -435,8 +511,9 @@ export function createServer(flyway, config) {
           // Require project initialization
           requireInitializedProject();
 
-          // Get migration directory (uses active project if set, otherwise global config)
-          const migrationDir = getMigrationsDirectory(config);
+          // Get migration directory with category support
+          const category = validatedArgs.category;
+          const migrationDir = getMigrationsDirectory(config, category);
 
           // Ensure migration directory exists
           await fs.mkdir(migrationDir, { recursive: true });
@@ -460,11 +537,13 @@ export function createServer(flyway, config) {
           // Write migration file
           await fs.writeFile(filepath, validatedArgs.sql, 'utf8');
 
+          const categoryInfo = category ? `\nCategory: ${category}` : '';
+
           return {
             content: [
               {
                 type: 'text',
-                text: `Migration file created successfully:\n\nPath: ${filepath}\nVersion: ${timestamp}\nDescription: ${cleanDescription}\n\nContent:\n${validatedArgs.sql}\n\nNext steps:\n1. Review the migration file\n2. Run 'flyway_migrate' to apply the migration`,
+                text: `Migration file created successfully:\n\nPath: ${filepath}${categoryInfo}\nVersion: ${timestamp}\nDescription: ${cleanDescription}\n\nContent:\n${validatedArgs.sql}\n\nNext steps:\n1. Review the migration file\n2. Run 'flyway_migrate' to apply the migration`,
               },
             ],
           };
