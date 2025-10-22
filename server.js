@@ -30,6 +30,7 @@ export const CreateMigrationSchema = z.object({
 
 export const InitializeProjectSchema = z.object({
   project_path: z.string().describe('Absolute path to the project directory'),
+  migrations_path: z.string().optional().describe('Relative path to migrations directory (default: ./migrations)'),
 });
 
 // Module-level state for active project
@@ -136,6 +137,10 @@ export function createServer(flyway, config) {
               project_path: {
                 type: 'string',
                 description: 'Absolute path to the project directory (e.g., /home/user/my-project)',
+              },
+              migrations_path: {
+                type: 'string',
+                description: 'Relative path to migrations directory (optional, defaults to ./migrations). Examples: ./migrations, ./db/migrations, ./sql',
               },
             },
             required: ['project_path'],
@@ -247,16 +252,22 @@ export function createServer(flyway, config) {
             projectConfig = existingConfig;
             configExisted = true;
           } else {
-            // Create new config
+            // Create new config with custom or default migrations path
+            const migrationsPathConfig = validatedArgs.migrations_path || './migrations';
             projectConfig = {
-              migrations_path: './migrations',
+              migrations_path: migrationsPathConfig,
               created_at: new Date().toISOString(),
             };
             await writeProjectConfig(projectPath, projectConfig);
           }
 
+          // Determine absolute migrations directory path
+          const migrationsPathConfig = projectConfig.migrations_path;
+          const migrationsPath = path.isAbsolute(migrationsPathConfig)
+            ? migrationsPathConfig
+            : path.join(projectPath, migrationsPathConfig);
+
           // Check for existing migrations directory
-          const migrationsPath = path.join(projectPath, 'migrations');
           let migrationsExist = false;
           try {
             await fs.access(migrationsPath);

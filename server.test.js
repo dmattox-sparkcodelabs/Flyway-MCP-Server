@@ -524,6 +524,64 @@ describe('Flyway MCP Server Integration Tests', () => {
       expect(config).toEqual(originalConfig);
     });
 
+    test('should accept custom migrations path', async () => {
+      // Create test project directory
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+            migrations_path: './db/migrations',
+          },
+        },
+      });
+
+      // Verify config has custom path
+      const configPath = path.join(testProjectDir, '.flyway-mcp.json');
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      expect(config.migrations_path).toBe('./db/migrations');
+
+      // Verify custom directory was created
+      const customMigrationsPath = path.join(testProjectDir, 'db', 'migrations');
+      const dirExists = await fs.access(customMigrationsPath).then(() => true).catch(() => false);
+      expect(dirExists).toBe(true);
+
+      // Verify response mentions the custom path
+      expect(result.content[0].text).toContain('db/migrations');
+    });
+
+    test('should default to ./migrations when no custom path specified', async () => {
+      // Create test project directory
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+
+      // Verify config has default path
+      const configPath = path.join(testProjectDir, '.flyway-mcp.json');
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      expect(config.migrations_path).toBe('./migrations');
+
+      // Verify default directory was created
+      const defaultMigrationsPath = path.join(testProjectDir, 'migrations');
+      const dirExists = await fs.access(defaultMigrationsPath).then(() => true).catch(() => false);
+      expect(dirExists).toBe(true);
+    });
+
     test('should reject non-existent project directory', async () => {
       const nonExistentPath = path.join(__dirname, 'does-not-exist-12345');
 
