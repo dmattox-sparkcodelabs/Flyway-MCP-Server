@@ -45,13 +45,14 @@ Result: Versioned, tracked, repeatable migration ✅
 
 ## Available Tools
 
-1. **create_migration** - Create new migration files with proper naming convention
-2. **flyway_migrate** - Apply pending migrations to the database
-3. **flyway_info** - Get current migration status and history
-4. **flyway_validate** - Validate applied migrations against available files
-5. **flyway_baseline** - Baseline an existing database
-6. **flyway_repair** - Repair migration history after failures
-7. **flyway_clean** - Drop all database objects (⚠️ development only!)
+1. **initialize_project** - Initialize Flyway for a project (sets up migrations folder and config)
+2. **create_migration** - Create new migration files with proper naming convention
+3. **flyway_migrate** - Apply pending migrations to the database
+4. **flyway_info** - Get current migration status and history
+5. **flyway_validate** - Validate applied migrations against available files
+6. **flyway_baseline** - Baseline an existing database
+7. **flyway_repair** - Repair migration history after failures
+8. **flyway_clean** - Drop all database objects (⚠️ development only!)
 
 ## Installation
 
@@ -172,6 +173,46 @@ When using WSL with Windows-hosted PostgreSQL:
   "FLYWAY_URL": "postgresql://user:pass@host.docker.internal:5432/database"
 }
 ```
+
+## Multi-Project Support
+
+The Flyway MCP Server supports working with multiple projects through per-project configuration.
+
+### Project Initialization
+
+When you start working on a new project, initialize it first:
+
+Ask Claude:
+```
+"Initialize Flyway for the project at /home/user/my-project"
+```
+
+This will:
+- ✅ Create `migrations/` directory (if it doesn't exist)
+- ✅ Create `.flyway-mcp.json` config file
+- ✅ Set this project as active for all migration operations
+
+**Project Config File (`.flyway-mcp.json`):**
+```json
+{
+  "migrations_path": "./migrations",
+  "created_at": "2025-01-22T10:30:00.000Z"
+}
+```
+
+### Switching Projects
+
+Simply initialize a different project to switch:
+
+```
+You: "Initialize Flyway for the ecommerce project at /home/user/ecommerce"
+Claude: [Switches to ecommerce project]
+
+You: "Create a migration to add products table"
+Claude: [Creates migration in /home/user/ecommerce/migrations/]
+```
+
+All subsequent operations use the active project's configuration.
 
 ## Usage
 

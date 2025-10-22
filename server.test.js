@@ -69,14 +69,15 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('List Tools', () => {
-    test('should list all 7 tools', async () => {
+    test('should list all 8 tools', async () => {
       const handler = server._requestHandlers.get('tools/list');
       expect(handler).toBeDefined();
 
       const result = await handler({ method: 'tools/list', params: {} });
 
-      expect(result.tools).toHaveLength(7);
+      expect(result.tools).toHaveLength(8);
       expect(result.tools.map(t => t.name)).toEqual([
+        'initialize_project',
         'flyway_info',
         'flyway_migrate',
         'flyway_validate',
@@ -388,6 +389,89 @@ describe('Flyway MCP Server Integration Tests', () => {
           },
         },
       })).rejects.toThrow('Invalid arguments');
+    });
+  });
+
+  describe('initialize_project tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-init');
+
+    afterEach(async () => {
+      // Clean up test project directory
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
+    test('should initialize project with migrations directory', async () => {
+      // Create test project directory
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+
+      // Verify response
+      expect(result.content[0].text).toContain('Project initialized successfully');
+      expect(result.content[0].text).toContain(testProjectDir);
+
+      // Verify migrations directory was created
+      const migrationsPath = path.join(testProjectDir, 'migrations');
+      const migrationsExists = await fs.access(migrationsPath).then(() => true).catch(() => false);
+      expect(migrationsExists).toBe(true);
+
+      // Verify config file was created
+      const configPath = path.join(testProjectDir, '.flyway-mcp.json');
+      const configExists = await fs.access(configPath).then(() => true).catch(() => false);
+      expect(configExists).toBe(true);
+
+      // Verify config content
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configContent);
+      expect(config).toHaveProperty('migrations_path', './migrations');
+      expect(config).toHaveProperty('created_at');
+    });
+
+    test('should handle existing migrations directory', async () => {
+      // Create test project directory with existing migrations
+      await fs.mkdir(path.join(testProjectDir, 'migrations'), { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+
+      expect(result.content[0].text).toContain('already existed');
+    });
+
+    test('should reject non-existent project directory', async () => {
+      const nonExistentPath = path.join(__dirname, 'does-not-exist-12345');
+
+      const handler = server._requestHandlers.get('tools/call');
+
+      await expect(handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: nonExistentPath,
+          },
+        },
+      })).rejects.toThrow('Project directory does not exist');
     });
   });
 });
