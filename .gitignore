@@ -6,6 +6,7 @@ package-lock.json
 test-migrations/
 test-migrations-temp/
 test-project-init/
+test-project-migrations/
 coverage/
 .jest-cache/
 

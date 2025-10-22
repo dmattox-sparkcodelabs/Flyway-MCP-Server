@@ -37,6 +37,14 @@ let activeProjectPath = null;
 let activeProjectConfig = null;
 
 /**
+ * Reset project state (for testing)
+ */
+export function resetProjectState() {
+  activeProjectPath = null;
+  activeProjectConfig = null;
+}
+
+/**
  * Read project configuration from .flyway-mcp.json
  */
 async function readProjectConfig(projectPath) {
@@ -80,6 +88,20 @@ function getMigrationsDirectory(globalConfig) {
   }
 
   return './migrations';
+}
+
+/**
+ * Check if a project has been initialized
+ * Throws a helpful error if not initialized
+ */
+function requireInitializedProject() {
+  if (!activeProjectPath || !activeProjectConfig) {
+    throw new Error(
+      'No project has been initialized. Please run initialize_project first.\n\n' +
+      'Example: "Initialize Flyway for the project at /path/to/your/project"\n\n' +
+      'This will create a .flyway-mcp.json config file and migrations directory in your project.'
+    );
+  }
 }
 
 /**
@@ -332,6 +354,9 @@ export function createServer(flyway, config) {
 
         case 'create_migration': {
           const validatedArgs = CreateMigrationSchema.parse(args);
+
+          // Require project initialization
+          requireInitializedProject();
 
           // Get migration directory (uses active project if set, otherwise global config)
           const migrationDir = getMigrationsDirectory(config);

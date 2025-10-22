@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { createServer } from './server.js';
+import { createServer, resetProjectState } from './server.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -23,6 +23,9 @@ describe('Flyway MCP Server Integration Tests', () => {
   let testMigrationDir;
 
   beforeEach(() => {
+    // Reset module-level project state
+    resetProjectState();
+
     // Create mock Flyway instance
     mockFlyway = {
       info: jest.fn(),
@@ -278,6 +281,34 @@ describe('Flyway MCP Server Integration Tests', () => {
   });
 
   describe('create_migration tool', () => {
+    const testProjectDir = path.join(__dirname, 'test-project-migrations');
+
+    beforeEach(async () => {
+      // Create test project directory
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      // Initialize the project
+      const handler = server._requestHandlers.get('tools/call');
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+    });
+
+    afterEach(async () => {
+      // Clean up test project directory
+      try {
+        await fs.rm(testProjectDir, { recursive: true, force: true });
+      } catch (error) {
+        // Directory might not exist
+      }
+    });
+
     test('should create migration file with correct name and content', async () => {
       const description = 'create_users_table';
       const sql = 'CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(255));';
@@ -295,18 +326,19 @@ describe('Flyway MCP Server Integration Tests', () => {
       });
 
       // Verify directory was created
-      const dirExists = await fs.access(testMigrationDir).then(() => true).catch(() => false);
+      const migrationsDir = path.join(testProjectDir, 'migrations');
+      const dirExists = await fs.access(migrationsDir).then(() => true).catch(() => false);
       expect(dirExists).toBe(true);
 
       // Verify file was created
-      const files = await fs.readdir(testMigrationDir);
+      const files = await fs.readdir(migrationsDir);
       expect(files).toHaveLength(1);
 
       const filename = files[0];
       expect(filename).toMatch(/^V\d{14}__create_users_table\.sql$/);
 
       // Verify file content
-      const filepath = path.join(testMigrationDir, filename);
+      const filepath = path.join(migrationsDir, filename);
       const content = await fs.readFile(filepath, 'utf8');
       expect(content).toBe(sql);
 
@@ -328,7 +360,8 @@ describe('Flyway MCP Server Integration Tests', () => {
         },
       });
 
-      const files = await fs.readdir(testMigrationDir);
+      const migrationsDir = path.join(testProjectDir, 'migrations');
+      const files = await fs.readdir(migrationsDir);
       const filename = files[0];
 
       expect(filename).toMatch(/^V\d{14}__create_users_table\.sql$/);
@@ -472,6 +505,80 @@ describe('Flyway MCP Server Integration Tests', () => {
           },
         },
       })).rejects.toThrow('Project directory does not exist');
+    });
+  });
+
+  describe('Project initialization enforcement', () => {
+    test('create_migration should reject when no project initialized', async () => {
+      const handler = server._requestHandlers.get('tools/call');
+
+      await expect(handler({
+        method: 'tools/call',
+        params: {
+          name: 'create_migration',
+          arguments: {
+            description: 'test_migration',
+            sql: 'CREATE TABLE test (id SERIAL);',
+          },
+        },
+      })).rejects.toThrow('No project has been initialized');
+    });
+
+    test('error message should guide user to initialize project', async () => {
+      const handler = server._requestHandlers.get('tools/call');
+
+      try {
+        await handler({
+          method: 'tools/call',
+          params: {
+            name: 'create_migration',
+            arguments: {
+              description: 'test_migration',
+              sql: 'CREATE TABLE test (id SERIAL);',
+            },
+          },
+        });
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error.message).toContain('initialize_project');
+        expect(error.message).toContain('Example:');
+        expect(error.message).toContain('.flyway-mcp.json');
+      }
+    });
+
+    test('create_migration should work after project initialization', async () => {
+      const testProjectDir = path.join(__dirname, 'test-project-init');
+      await fs.mkdir(testProjectDir, { recursive: true });
+
+      const handler = server._requestHandlers.get('tools/call');
+
+      // First initialize the project
+      await handler({
+        method: 'tools/call',
+        params: {
+          name: 'initialize_project',
+          arguments: {
+            project_path: testProjectDir,
+          },
+        },
+      });
+
+      // Now create_migration should work
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'create_migration',
+          arguments: {
+            description: 'test_migration',
+            sql: 'CREATE TABLE test (id SERIAL);',
+          },
+        },
+      });
+
+      expect(result.content[0].text).toContain('Migration file created successfully');
+
+      // Clean up
+      await fs.rm(testProjectDir, { recursive: true, force: true });
     });
   });
 });
