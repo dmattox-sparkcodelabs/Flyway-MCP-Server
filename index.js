@@ -7,29 +7,16 @@
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { Flyway } from 'node-flyway';
 import { createServer } from './server.js';
 
-// Get configuration from environment variables
+// Minimal config for backwards compatibility with getMigrationsDirectory fallback
+// Note: Database connections are now per-project via initialize_project tool
 const config = {
-  url: process.env.FLYWAY_URL || process.env.POSTGRES_CONNECTION_STRING,
-  user: process.env.FLYWAY_USER,
-  password: process.env.FLYWAY_PASSWORD,
   locations: process.env.FLYWAY_LOCATIONS ? process.env.FLYWAY_LOCATIONS.split(',') : ['filesystem:./migrations'],
-  baselineOnMigrate: process.env.FLYWAY_BASELINE_ON_MIGRATE === 'true',
 };
 
-// Validate required configuration
-if (!config.url) {
-  console.error('Error: FLYWAY_URL or POSTGRES_CONNECTION_STRING environment variable is required');
-  process.exit(1);
-}
-
-// Initialize Flyway
-const flyway = new Flyway(config);
-
-// Create MCP server
-const server = createServer(flyway, config);
+// Create MCP server (no global Flyway instance - each project creates its own)
+const server = createServer(null, config);
 
 // Start server
 async function main() {
